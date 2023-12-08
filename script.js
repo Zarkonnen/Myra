@@ -11,24 +11,65 @@ const skyT = {x: 80, y: 144};
 const roadT = {x: 64, y: 176};
 var scale = 1;
 var edit = false;
+const hurtTime = 80 * 3 + 20;
 
-const nickWalk = {x:256, y:0, frames: 8, period: 80 };
+const nickWalk = {x:256, y:0, frames: 8, period: 80};
 const nickAttack = {x: 384, y: 0, frames: 6, period: 80};
 const nickJumpStart = {x: 464, y: 0};
 const nickJumpUp = {x: 464 + 16, y: 0};
 const nickJumpDown = {x: 464 + 32, y: 0};
 const nickJumpLand = {x: 464 + 48, y: 0};
+const nickStun = {x: 544, y: 0};
+const nickDeath = {x: 544, y: 0, frames: 6, period: 300};
 
-var player = {
-    x: 34,
-    y: 104,
-    dy: 0,
-    flip: false,
-    animTime: 0,
-    attackTime: 0,
-    attacking: false,
-    landTime: 0
+var enemyType = {
+    pimp: {
+        walkAnim: {x:256, y:32, frames: 8, period: 80},
+        speed: 0.04,
+        attackAnim: {x:384, y:32, frames: 4, period: 200},
+        deathAnim: {x:448, y:32, frames: 4, period: 200},
+        stunFrame: {x:448, y:32},
+        hitStun: 1000,
+        hurtStun: 400,
+        attackInterval: 1000,
+        hp: 2,
+        attackDamage: 3
+    }
 };
+
+var enemies = [];
+
+var player = null;
+
+function reset() {
+    player = {
+        x: 34,
+        y: 104,
+        dy: 0,
+        flip: false,
+        animTime: 0,
+        attackTime: 0,
+        attacking: false,
+        landTime: 0,
+        stun: 0,
+        hp: 10
+    };
+    enemies = [
+        {
+            type: enemyType.pimp,
+            x: 200,
+            y: 104,
+            animTime: 0,
+            flip: true,
+            stun: 0,
+            hp: 2,
+            attacking: false,
+            cooldown: 0
+        }
+    ];
+}
+
+reset();
 
 function isFloor(x, y) {
     if (x < 0 || x >= tiles[0].length || y < 0) { return false; }
@@ -104,6 +145,21 @@ function tick(ms) {
         return;
     }
     
+    // Enemies
+    enemies.forEach(e => {
+        var anim = e.type.walkAnim;
+        if (e.stun > 0) {
+            anim = e.type.stunFrame;
+        }
+        if (e.hp <= 0) {
+            anim = e.type.deathAnim;
+        }
+        if (e.attacking) {
+            anim = e.type.attackAnim;
+        }
+        blit(anim, Math.floor(e.x - scrollX), Math.floor(e.y), e.animTime, e.flip);
+    });
+    
     var prevFootTileY = Math.ceil(player.y / 16);
     var prevOnFloor = player.y == 104 || isFloor(Math.floor(player.x / 16 + 0.25), prevFootTileY + 1) || isFloor(Math.floor(player.x / 16 + 0.75), prevFootTileY + 1);
     var canJump = prevOnFloor && player.dy >= 0;
@@ -125,7 +181,7 @@ function tick(ms) {
         player.dy += 0.0002 * ms;
     }
     
-    if (player.landTime <= 0) {
+    if (player.landTime <= 0 && player.stun <= 0 && player.hp > 0) {
         if (!player.attacking && (pressed(" ") || pressed("E"))) {
             player.attacking = true;
             player.attackTime = 0;
@@ -155,8 +211,31 @@ function tick(ms) {
     var prevScrollX = scrollX;
     scrollX = Math.min(tiles[0].length * 16 - 320, Math.max(0, Math.floor(player.x + 8 - 160)));
     
-    if (player.attacking) {
+    if (player.hp <= 0) {
+        player.animTime += ms;
+    } else if (player.stun > 0) {
+        player.stun -= ms;
+    } else if (player.attacking) {
+        var prevHurt = player.attackTime < hurtTime;
         player.attackTime += ms;
+        if (prevHurt && player.attackTime >= hurtTime) {
+            // Find an enemy to hurt.
+            var hurtBoxX = player.flipped ? player.x - 16 : player.x;
+            var hurtBoxY = player.y;
+            var hurtBoxW = 32;
+            var hurtBoxH = 16;
+            var candidates = enemies.filter(e => e.stun <= 0 && e.x + 16 >= hurtBoxX && e.x <= hurtBoxX + hurtBoxW && e.y + 16 >= hurtBoxY && e.y <= hurtBoxY + hurtBoxH);
+            if (candidates.length == 0) {
+                candidates = enemies.filter(e => e.x + 16 >= hurtBoxX && e.x <= hurtBoxX + hurtBoxW && e.y + 16 >= hurtBoxY && e.y <= hurtBoxY + hurtBoxH);
+            }
+            if (candidates.length != 0) {
+                var e = candidates[0];
+                e.hp--;
+                e.stun = e.type.hitStun;
+                e.animTime = 0;
+                e.attacking = false;
+            }
+        }
         player.animTime += ms;
         if (player.animTime >= nickAttack.period * nickAttack.frames) {
             player.attacking = false;
@@ -164,7 +243,11 @@ function tick(ms) {
         }
     }
     
-    if (player.attacking) {
+    if (player.hp <= 0) {
+        blit(nickDeath, Math.floor(player.x) - scrollX, Math.floor(player.y), Math.min(player.animTime, nickDeath.frames * nickDeath.period - 1), player.flip);
+    } else if (player.stun > 0) {
+        blit(nickStun, Math.floor(player.x) - scrollX, Math.floor(player.y), player.animTime, player.flip);
+    } else if (player.attacking) {
         blit(nickAttack, Math.floor(player.x) - scrollX, Math.floor(player.y), player.animTime, player.flip);
     } else if (player.landTime > 0) {
         blit(nickJumpLand, Math.floor(player.x) - scrollX, Math.floor(player.y), player.animTime, player.flip);
@@ -186,22 +269,62 @@ function tick(ms) {
         }
     }}
     
-    
-    /*var layers = [80, 80, 80, 112, 32, 16, 64];
-    var between = [{x:80, y:144}, {x:80, y:144}, {x:80, y:144}, {x:96, y:176}, {x:96, y:192}, {x:96, y:208}, {x:64, y:176}];
-    for (var y = 0; y < layers.length; y++) { for (var x = 0; x < 320; x += 16) {
-        if (x % 80 == 0) {
-            blit(between[y], x, y * 16);
-        } else {
-            blit({x: layers[y], y: 144}, x, y * 16);
+    enemies.forEach(e => {
+        if (player.hp <= 0) { return; }
+        if (e.hp <= 0) {
+            e.animTime += ms;
+            return;
         }
-    }}
-    blit({x: 448, y: 16, frames: 4, period: 200}, 152, 90);
-    /*if (t % 1000 < 500) {
-        blit({x: 256 + 32, y: 48}, 10, 10);
-    } else {
-        blit({x: 448, y: 48}, 10, 10);
-    }*/
+        if (e.stun > 0) { e.stun -= ms; return; }
+        
+        if (e.attacking) {
+            e.animTime += ms;
+            if (e.animTime >= e.type.attackAnim.frames * e.type.attackAnim.period) {
+                e.attacking = false;
+                e.animTime = 0;
+                var hurtBoxX = e.flipped ? e.x - 16 : e.x;
+                var hurtBoxY = e.y;
+                var hurtBoxW = 32;
+                var hurtBoxH = 16;
+                if (player.x + 16 >= hurtBoxX && player.x <= hurtBoxX + hurtBoxW && player.y + 16 >= hurtBoxY && player.y <= hurtBoxY + hurtBoxH) {
+                    player.animTime = 0;
+                    player.attacking = false;
+                    player.stun = e.type.hurtStun;
+                    player.hp -= e.type.attackDamage;
+                }
+            }
+            return;
+        }
+        e.cooldown -= ms;
+        if (Math.abs(e.x - player.x) <= 12 && player.y >= 104 - 15 && e.cooldown <= 0) {
+            e.flip = e.x > player.x;
+            e.animTime = 0;
+            e.attacking = true;
+            e.cooldown = e.type.attackInterval;
+            return;
+        }
+        if (player.y == 104 && Math.abs(e.x - player.x) < 120 && Math.abs(e.x - player.x) > 10) {
+            e.flip = e.x > player.x;
+            e.x += (e.flip ? -1 : 1) * ms * e.type.speed;
+            e.animTime += ms;
+        }
+    });
+    
+    enemies = enemies.filter(e => e.hp > 0 || e.animTime < e.type.deathAnim.frames * e.type.deathAnim.period);
+    
+    if (player.hp <= 0) {
+        c.fillStyle = "black";
+        if (player.animTime > 4500) {
+            reset();
+        }
+        if (player.animTime > 3600) {
+            c.fillRect(0, 0, 320, 224);
+        } else if (player.animTime > 2700) {
+            for (var y = 0; y < 224; y += 2) {
+                c.fillRect(0, y, 320, 1);
+            }
+        }
+    }
 }
 
 var images = {};
