@@ -11,19 +11,20 @@ const skyT = {x: 80, y: 144};
 const roadT = {x: 64, y: 176};
 var scale = 1;
 var edit = false;
-const hurtTime = 80 * 3 + 20;
+const hurtTime = 120 * 3 + 20;
 const maxHP = 12;
 var level = 0;
 var intro = true;
 var victory = false;
 
 const nickWalk = {x:256, y:0, frames: 8, period: 80};
-const nickAttack = {x: 384, y: 0, frames: 6, period: 80};
+const nickAttack = {x: 384, y: 0, frames: 6, period: 120};
 const nickJumpStart = {x: 464, y: 0};
 const nickJumpUp = {x: 464 + 16, y: 0};
 const nickJumpDown = {x: 464 + 32, y: 0};
 const nickJumpLand = {x: 464 + 48, y: 0};
 const nickStun = {x: 544, y: 0};
+const nickBlock = {x: 528, y: 0};
 const nickDeath = {x: 544, y: 0, frames: 6, period: 300};
 
 var enemyType = {
@@ -75,7 +76,8 @@ function reset() {
         attacking: false,
         landTime: 0,
         stun: 0,
-        hp: maxHP
+        hp: maxHP,
+        blocking: false
     };
     
     enemies = levels[level].enemies.map(x => {
@@ -98,7 +100,7 @@ function reset() {
             type: pickupType[p.type]
         }
     });
-    intro = true;
+    intro = false;
     victory = false;
 }
 
@@ -247,20 +249,25 @@ function tick(ms) {
             player.attackTime = 0;
             player.animTime = 0;
         }
-        if (canJump && (down("ArrowUp") || down("W"))) {
-            player.dy = -0.1;
-        }
-        if (down("ArrowLeft") || down("A")) {
-            player.flip = true;
-            if (!player.attacking) {
-                player.x -= ms / 30;
-                player.animTime += ms;
+        player.blocking = false;
+        if (down("ArrowDown") || down("S")) {
+            player.blocking = true;
+        } else {
+            if (canJump && (down("ArrowUp") || down("W"))) {
+                player.dy = -0.1;
             }
-        } else if (down("ArrowRight") || down("D")) {
-            player.flip = false;
-            if (!player.attacking) {
-                player.x += ms / 30;
-                player.animTime += ms;
+            if (down("ArrowLeft") || down("A")) {
+                player.flip = true;
+                if (!player.attacking) {
+                    player.x -= ms / 30;
+                    player.animTime += ms;
+                }
+            } else if (down("ArrowRight") || down("D")) {
+                player.flip = false;
+                if (!player.attacking) {
+                    player.x += ms / 30;
+                    player.animTime += ms;
+                }
             }
         }
     } else {
@@ -320,6 +327,8 @@ function tick(ms) {
         blit(nickDeath, Math.floor(player.x) - scrollX, Math.floor(player.y), Math.min(player.animTime, nickDeath.frames * nickDeath.period - 1), player.flip);
     } else if (player.stun > 0) {
         blit(nickStun, Math.floor(player.x) - scrollX, Math.floor(player.y), player.animTime, player.flip);
+    } else if (player.blocking) {
+        blit(nickBlock, Math.floor(player.x) - scrollX, Math.floor(player.y), player.animTime, player.flip);
     } else if (player.attacking) {
         blit(nickAttack, Math.floor(player.x) - scrollX, Math.floor(player.y), player.animTime, player.flip);
     } else if (player.landTime > 0) {
@@ -360,7 +369,7 @@ function tick(ms) {
                 var hurtBoxY = e.y;
                 var hurtBoxW = 32;
                 var hurtBoxH = 16;
-                if (player.x + 16 >= hurtBoxX && player.x <= hurtBoxX + hurtBoxW && player.y + 16 >= hurtBoxY && player.y <= hurtBoxY + hurtBoxH) {
+                if (!player.blocking && player.x + 16 >= hurtBoxX && player.x <= hurtBoxX + hurtBoxW && player.y + 16 >= hurtBoxY && player.y <= hurtBoxY + hurtBoxH) {
                     player.animTime = 0;
                     player.attacking = false;
                     player.stun = e.type.hurtStun;
@@ -386,13 +395,18 @@ function tick(ms) {
     
     enemies = enemies.filter(e => e.hp > 0 || e.animTime < e.type.deathAnim.frames * e.type.deathAnim.period);
     
-    c.fillStyle = "#a3ccd9";
-    c.fillRect(16, 144, 80, 16);
-    c.fillStyle = "#1c284d";
-    c.fillRect(17, 145, 78, 14);
+    blit({x: 368, y: 224, w: 160, h: 96}, 0, 128);
+    blit({x: 368, y: 224, w: 160, h: 96}, 160, 128, 0, true);
     c.fillStyle = "#d9214f";
-    c.fillRect(18, 146, Math.floor(76.0 * Math.max(0, player.hp) / maxHP), 12);
-    drawText("HP", 19, 144);
+    c.fillRect(48, 192, Math.floor(224.0 * Math.max(0, player.hp) / maxHP), 12);
+    //drawText("HP", 19, 144);
+    
+    if (player.x < 120) {
+        drawText("UP JUMP\nLEFT/RIGHT MOVE\n", 34, 144 + 8, 1);
+        drawText("DOWN BLOCK", 320 - 34 - textWidth("DOWN BLOCK"), 144 + 8, 1);
+        drawText("SPACE PUNCH", 320 - 34 - textWidth("SPACE PUNCH"), 144 + 8 + 16, 1);
+    }
+    //\nS/DOWN - BLOCK\nE/SPACE - PUNCH
     
     if (player.hp <= 0) {
         c.fillStyle = "black";
@@ -485,7 +499,8 @@ var offsets = {
     "9": 456,
     "(": 532,
     ")": 537,
-    "-": 485
+    "-": 485,
+    '/': 575
 };
 
 var widths = {
@@ -534,7 +549,8 @@ var widths = {
     "9": 7,
     "(": 5,
     ")": 5,
-    "-": 7
+    "-": 7,
+    '/': 5
 }
 
 function textWidth(s) {
