@@ -100,7 +100,7 @@ function reset() {
             type: pickupType[p.type]
         }
     });
-    intro = false;
+    intro = true;
     victory = false;
 }
 
@@ -134,12 +134,15 @@ function tick(ms) {
     }
     jQuery(canvas).css("width", (320 * scale)).css("height", (224 * scale));
     
-    c.fillStyle = "#00021c";
-    c.fillRect(0, 0, 320, 224);
+    /*c.fillStyle = "#00021c";
+    c.fillRect(0, 0, 320, 224);*/
     
     if (victory && !edit) {
-        blit(levels[level].victory, (320 - 96) / 2, 16);
-        drawText("E OR SPACE TO CONTINUE", 16, 224 - 32, 1);
+        blit({x: 528, y: 224, w: 160, h: 224}, 0, 0);
+        blit({x: 528, y: 224, w: 160, h: 224}, 160, 0, 0, true);
+        blit(levels[level].victory, (320 - 96) / 2, 40);
+        drawText(levels[level].victoryText, Math.floor((320 - textWidth(levels[level].victoryText)) / 2), 16, 2);
+        drawText("E OR SPACE TO CONTINUE", Math.floor((320 - textWidth("E OR SPACE TO CONTINUE")) / 2), 224 - 32, 1);
         if (pressed(" ") || pressed("E")) {
             //level++;
             reset();
@@ -148,6 +151,10 @@ function tick(ms) {
     }
     
     if (intro && !edit) {
+        c.fillStyle = "#a3ccd9";
+        c.fillRect(0, 0, 320, 224);
+        c.fillStyle = "#7497a6";
+        c.fillRect(2, 2, 320 - 4, 224 - 4);
         drawText(levels[level].date, 16, 16, 2);
         drawText(levels[level].intro, 16, 32, 0);
         drawText("E OR SPACE TO START", 16, 224 - 32, 1);
@@ -223,21 +230,22 @@ function tick(ms) {
     });
     
     var prevFootTileY = Math.ceil(player.y / 16);
-    var prevOnFloor = player.y == 104 || isFloor(Math.floor(player.x / 16 + 0.25), prevFootTileY + 1) || isFloor(Math.floor(player.x / 16 + 0.75), prevFootTileY + 1);
-    var canJump = prevOnFloor && player.dy >= 0;
+    var prevOnGround = player.y == 104;
+    var prevOnPlatform = isFloor(Math.floor(player.x / 16 + 0.25), prevFootTileY + 1) || isFloor(Math.floor(player.x / 16 + 0.75), prevFootTileY + 1);
+    var canJump = (prevOnGround || prevOnPlatform) && player.dy >= 0;
     player.y += player.dy * ms;
     var footTileY = Math.ceil(player.y / 16);
     if (player.y >= 104) {
         player.dy = 0;
         player.y = 104;
-        if (!prevOnFloor) {
-            player.landTime = 120;
+        if (!prevOnGround) {
+            player.landTime = 200;
         }
     } else if (footTileY > prevFootTileY && (isFloor(Math.floor(player.x / 16 + 0.25), footTileY) || isFloor(Math.floor(player.x / 16 + 0.75), footTileY))) {
         player.dy = 0;
         player.y = prevFootTileY * 16;
-        if (!prevOnFloor) {
-            player.landTime = 120;
+        if (!prevOnPlatform) { // Actually broken, eh.
+            player.landTime = 200;
         }
     } else {
         player.dy += 0.0002 * ms;
@@ -300,9 +308,9 @@ function tick(ms) {
         player.attackTime += ms;
         if (prevHurt && player.attackTime >= hurtTime) {
             // Find an enemy to hurt.
-            var hurtBoxX = player.flipped ? player.x - 16 : player.x;
+            var hurtBoxX = player.flipped ? player.x - 8 : player.x + 8;
             var hurtBoxY = player.y;
-            var hurtBoxW = 32;
+            var hurtBoxW = 16;
             var hurtBoxH = 16;
             var candidates = enemies.filter(e => e.stun <= 0 && e.x + 16 >= hurtBoxX && e.x <= hurtBoxX + hurtBoxW && e.y + 16 >= hurtBoxY && e.y <= hurtBoxY + hurtBoxH);
             if (candidates.length == 0) {
@@ -333,7 +341,7 @@ function tick(ms) {
         blit(nickAttack, Math.floor(player.x) - scrollX, Math.floor(player.y), player.animTime, player.flip);
     } else if (player.landTime > 0) {
         blit(nickJumpLand, Math.floor(player.x) - scrollX, Math.floor(player.y), player.animTime, player.flip);
-    } else if (!prevOnFloor) {
+    } else if (!prevOnGround && !prevOnPlatform) {
         if (player.dy < -0.05) {
             blit(nickJumpStart, Math.floor(player.x) - scrollX, Math.floor(player.y), player.animTime, player.flip);
         } else if (player.dy <= 0) {
@@ -409,7 +417,7 @@ function tick(ms) {
     //\nS/DOWN - BLOCK\nE/SPACE - PUNCH
     
     if (player.hp <= 0) {
-        c.fillStyle = "black";
+        c.fillStyle = "#00021c";
         if (player.animTime > 4500) {
             reset();
         }
