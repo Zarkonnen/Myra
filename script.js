@@ -7,13 +7,12 @@ var scrollX = 0;
 var t = 0;
 var tiles = [];
 var selection = {x: 80, y: 144};
-const skyT = {x: 80, y: 144};
-const roadT = {x: 64, y: 176};
 var scale = 1;
-var edit = false;
+var edit = true;
+var paletteScrollX = 0;
 const hurtTime = 120 * 3 + 20;
 const maxHP = 12;
-var level = 0;
+var level = 1;
 var intro = true;
 var victory = false;
 
@@ -27,6 +26,28 @@ const nickStun = {x: 544, y: 0};
 const nickBlock = {x: 528, y: 0};
 const nickDeath = {x: 544, y: 0, frames: 6, period: 300};
 
+var overlays = [
+    {x: 224, y: 176},
+    
+    {x: 256, y: 128},
+    {x: 272, y: 128},
+    {x: 288, y: 128},
+    {x: 304, y: 128},
+    {x: 320, y: 128},
+    
+    {x: 256, y: 160},
+    {x: 272, y: 160},
+    {x: 288, y: 160},
+    {x: 304, y: 160},
+    {x: 320, y: 160},
+    
+    {x: 256, y: 192},
+    {x: 272, y: 192},
+    {x: 288, y: 192},
+    {x: 304, y: 192},
+    {x: 320, y: 192},
+];
+
 var enemyType = {
     pimp: {
         walkAnim: {x:256, y:32, frames: 8, period: 80},
@@ -37,6 +58,18 @@ var enemyType = {
         hitStun: 1000,
         hurtStun: 400,
         attackInterval: 1000,
+        hp: 2,
+        attackDamage: 3
+    },
+    taxCollector: {
+        walkAnim: {x:256, y:16, frames: 8, period: 80},
+        speed: 0.045,
+        attackAnim: {x:384, y:16, frames: 4, period: 200},
+        deathAnim: {x:448, y:16, frames: 4, period: 200},
+        stunFrame: {x:448, y:16},
+        hitStun: 400,
+        hurtStun: 800,
+        attackInterval: 800,
         hp: 2,
         attackDamage: 3
     }
@@ -66,9 +99,10 @@ var pickups = [];
 var player = null;
 
 function reset() {
+    tiles = levels[level].tiles;
     player = {
         x: 34,
-        y: 104,
+        y: levels[level].groundLevel,
         dy: 0,
         flip: false,
         animTime: 0,
@@ -84,7 +118,7 @@ function reset() {
         return {
             type: enemyType[levels[level].enemyType],
             x: x,
-            y: 104,
+            y: levels[level].groundLevel,
             animTime: 0,
             flip: true,
             stun: 0,
@@ -104,12 +138,32 @@ function reset() {
     victory = false;
 }
 
+//tiles = levels[1].tiles;//genTiles(64, 8);
+
 reset();
 
+var floorTs = [
+    {x: 224, y: 192},
+    {x: 96, y: 304},
+    {x: 112, y: 304},
+    {x: 128, y: 304},
+    {x: 144, y: 304},
+    {x: 160, y: 304},
+    {x: 176, y: 304},
+    {x: 192, y: 304},
+    {x: 208, y: 304},
+    {x: 256, y: 288},
+    {x: 304, y: 288},
+    {x: 304, y: 272},
+    {x: 288, y: 272},
+    {x: 272, y: 272},
+    {x: 256, y: 272},
+    {x: 240, y: 272},
+]
 function isFloor(x, y) {
     if (x < 0 || x >= tiles[0].length || y < 0) { return false; }
     if (y >= tiles.length) { return true; }
-    return tiles[y][x].x == 224 && tiles[y][x].y == 192;
+    return floorTs.some(ft => tiles[y][x].x == ft.x && tiles[y][x].y == ft.y);
 }
 
 function genTiles(w, h) {
@@ -118,13 +172,11 @@ function genTiles(w, h) {
         var row = [];
         ts.push(row);
         for (var x = 0; x < w; x++) {
-            row.push(y == h - 1 ? roadT : skyT);
+            row.push(y == h - 1 ? {x:144, y:240} : y == h - 2 ? {x:128, y: 240} : {x: 80, y: 144});
         }
     }
     return ts;
 }
-
-tiles = levels[0].tiles;//genTiles(64, 8);
 
 function tick(ms) {
     t += ms;
@@ -134,8 +186,10 @@ function tick(ms) {
     }
     jQuery(canvas).css("width", (320 * scale)).css("height", (224 * scale));
     
-    /*c.fillStyle = "#00021c";
-    c.fillRect(0, 0, 320, 224);*/
+    if (edit) {
+        c.fillStyle = "#00021c";
+        c.fillRect(0, 0, 320, 224);
+    }
     
     if (victory && !edit) {
         blit({x: 528, y: 224, w: 160, h: 224}, 0, 0);
@@ -180,32 +234,46 @@ function tick(ms) {
             palette = !palette;
         }
         if (down("ArrowLeft")) {
-            scrollX--;
+            if (palette) {
+                paletteScrollX++;
+            } else {
+                scrollX--;
+            }
         }
         if (down("ArrowRight")) {
-            scrollX++;
-        }
-        if (pressed("1")) {
-            scaleOverride = !scaleOverride;
+            if (palette) {
+                paletteScrollX--;
+            } else {
+                scrollX++;
+            }
         }
         if (pressed("V")) {
             console.log(JSON.stringify(tiles));
         }
+        
+        // Balconies etc
+        for (var y = 0; y < tiles.length; y++) { for (var x = 0; x < tiles[0].length; x++) {
+            overlays.forEach(o => {
+                if (tiles[y][x].x == o.x && tiles[y][x].y == o.y + 16) {
+                    blit(o, x * 16 - scrollX, y * 16 - 16);
+                }
+            });
+        }}
         
         var tx = Math.floor((cursor.x + scrollX) / 16);
         var ty = Math.floor(cursor.y / 16);
         drawText(tx + ", " + ty, 320 - 48, 0);
         
         if (palette) {
-            blit({x: 0, y: 128, w: 256, h: 192}, 0, 0);
+            blit({x: -paletteScrollX * 16, y: 128, w: 320, h: 224}, 0, 0);
             if (click) {
-                selection = {x: Math.floor(click.x / 16) * 16, y: Math.floor(click.y / 16) * 16 + 128};
+                selection = {x: Math.floor(click.x / 16 - paletteScrollX) * 16, y: Math.floor(click.y / 16) * 16 + 128};
             }
             c.fillStyle = "yellow";
-            c.fillRect(selection.x, selection.y - 128, 16, 1);
-            c.fillRect(selection.x, selection.y - 128, 1, 16);
-            c.fillRect(selection.x + 15, selection.y - 128, 1, 16);
-            c.fillRect(selection.x, selection.y - 128 + 15, 16, 1);
+            c.fillRect(selection.x + paletteScrollX * 16, selection.y - 128, 16, 1);
+            c.fillRect(selection.x + paletteScrollX * 16, selection.y - 128, 1, 16);
+            c.fillRect(selection.x + paletteScrollX * 16 + 15, selection.y - 128, 1, 16);
+            c.fillRect(selection.x + paletteScrollX * 16, selection.y - 128 + 15, 16, 1);
         } else if (mouseDown) {
             if (tx >= 0 && tx < tiles[0].length && ty < tiles.length) {
                 tiles[ty][tx] = selection;
@@ -230,14 +298,14 @@ function tick(ms) {
     });
     
     var prevFootTileY = Math.ceil(player.y / 16);
-    var prevOnGround = player.y == 104;
+    var prevOnGround = player.y == levels[level].groundLevel;
     var prevOnPlatform = isFloor(Math.floor(player.x / 16 + 0.25), prevFootTileY + 1) || isFloor(Math.floor(player.x / 16 + 0.75), prevFootTileY + 1);
     var canJump = (prevOnGround || prevOnPlatform) && player.dy >= 0;
     player.y += player.dy * ms;
     var footTileY = Math.ceil(player.y / 16);
-    if (player.y >= 104) {
+    if (player.y >= levels[level].groundLevel) {
         player.dy = 0;
-        player.y = 104;
+        player.y = levels[level].groundLevel;
         if (!prevOnGround) {
             player.landTime = 200;
         }
@@ -262,7 +330,7 @@ function tick(ms) {
             player.blocking = true;
         } else {
             if (canJump && (down("ArrowUp") || down("W"))) {
-                player.dy = -0.1;
+                player.dy = -0.12;
             }
             if (down("ArrowLeft") || down("A")) {
                 player.flip = true;
@@ -353,11 +421,13 @@ function tick(ms) {
         blit(nickWalk, Math.floor(player.x) - scrollX, Math.floor(player.y), player.animTime, player.flip);
     }
     
-    // Balconies
+    // Balconies etc
     for (var y = 0; y < tiles.length; y++) { for (var x = 0; x < tiles[0].length; x++) {
-        if (tiles[y][x].x == 224 && tiles[y][x].y == 192) {
-            blit({x: 224, y: 176}, x * 16 - prevScrollX, y * 16 - 16);
-        }
+        overlays.forEach(o => {
+            if (tiles[y][x].x == o.x && tiles[y][x].y == o.y + 16) {
+                blit(o, x * 16 - prevScrollX, y * 16 - 16);
+            }
+        });
     }}
     
     enemies.forEach(e => {
@@ -387,14 +457,14 @@ function tick(ms) {
             return;
         }
         e.cooldown -= ms;
-        if (Math.abs(e.x - player.x) <= 12 && player.y >= 104 - 15 && e.cooldown <= 0) {
+        if (Math.abs(e.x - player.x) <= 12 && player.y >= levels[level].groundLevel - 15 && e.cooldown <= 0) {
             e.flip = e.x > player.x;
             e.animTime = 0;
             e.attacking = true;
             e.cooldown = e.type.attackInterval;
             return;
         }
-        if (player.y == 104 && Math.abs(e.x - player.x) < 120 && Math.abs(e.x - player.x) > 10) {
+        if (player.y == levels[level].groundLevel && Math.abs(e.x - player.x) < 120 && Math.abs(e.x - player.x) > 10) {
             e.flip = e.x > player.x;
             e.x += (e.flip ? -1 : 1) * ms * e.type.speed;
             e.animTime += ms;
