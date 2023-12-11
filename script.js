@@ -12,9 +12,10 @@ var edit = false;
 var paletteScrollX = 0;
 const hurtTime = 120 * 3 + 20;
 const maxHP = 12;
-var level = 1;
+var level = 0;
 var intro = true;
 var victory = false;
+var newGamePlus = 0;
 
 const nickWalk = {x:256, y:0, frames: 8, period: 80};
 const nickAttack = {x: 384, y: 0, frames: 6, period: 120};
@@ -46,6 +47,9 @@ var overlays = [
     {x: 288, y: 192},
     {x: 304, y: 192},
     {x: 320, y: 192},
+    
+    {x: 304, y: 240},
+    {x: 320, y: 240},
 ];
 
 var enemyType = {
@@ -73,6 +77,19 @@ var enemyType = {
         attackInterval: 800,
         hp: 2,
         attackDamage: 3,
+        coordinateRange: 40
+    },
+    butcher: {
+        walkAnim: {x:256, y:48, frames: 8, period: 80},
+        speed: 0.045,
+        attackAnim: {x:384, y:48, frames: 4, period: 300},
+        deathAnim: {x:448, y:48, frames: 4, period: 200},
+        stunFrame: {x:448, y:48},
+        hitStun: 0,
+        hurtStun: 800,
+        attackInterval: 1000,
+        hp: 3,
+        attackDamage: 4,
         coordinateRange: 40
     }
 };
@@ -116,15 +133,15 @@ function reset() {
         blocking: false
     };
     
-    enemies = levels[level].enemies.map(x => {
+    enemies = levels[level].enemies.map(ei => {
         return {
             type: enemyType[levels[level].enemyType],
-            x: x,
-            y: levels[level].groundLevel,
+            x: ei.x ? ei.x : ei,
+            y: ei.y ? ei.y : levels[level].groundLevel,
             animTime: 0,
             flip: true,
             stun: 0,
-            hp: enemyType[levels[level].enemyType].hp,
+            hp: enemyType[levels[level].enemyType].hp + newGamePlus,
             attacking: false,
             cooldown: 0
         }
@@ -144,6 +161,8 @@ function reset() {
 
 reset();
 
+//tiles = genTiles(64, 8);
+
 var floorTs = [
     {x: 224, y: 192},
     {x: 96, y: 304},
@@ -161,6 +180,8 @@ var floorTs = [
     {x: 272, y: 272},
     {x: 256, y: 272},
     {x: 240, y: 272},
+    {x: 304, y: 256},
+    {x: 320, y: 256},
 ]
 function isFloor(x, y) {
     if (x < 0 || x >= tiles[0].length || y < 0) { return false; }
@@ -174,7 +195,8 @@ function genTiles(w, h) {
         var row = [];
         ts.push(row);
         for (var x = 0; x < w; x++) {
-            row.push(y == h - 1 ? {x:144, y:240} : y == h - 2 ? {x:128, y: 240} : {x: 80, y: 144});
+            //row.push(y == h - 1 ? {x:144, y:240} : y == h - 2 ? {x:128, y: 240} : {x: 80, y: 144});
+            row.push(y == h - 1 ? {x:64, y:176} : {x: 80, y: 144});
         }
     }
     return ts;
@@ -193,6 +215,24 @@ function tick(ms) {
         c.fillRect(0, 0, 320, 224);
     }
     
+    //level = 3;
+    
+    if (level == 3) {
+        blit({x: 688, y: 224, w: 160, h: 224}, 0, 0);
+        blit({x: 688, y: 224, w: 160, h: 224}, 160, 0, 0, true);
+        blit(levels[0].victory, 6, 40);
+        blit(levels[1].victory, (320 - 96) / 2, 40);
+        blit(levels[2].victory, 320 - 96 - 6, 40);
+        drawText("THE WORKS OF SAINT NICHOLAS", Math.floor((320 - textWidth("THE WORKS OF SAINT NICHOLAS")) / 2), 16, 2);
+        drawText("E OR SPACE FOR NEW GAME PLUS", Math.floor((320 - textWidth("E OR SPACE FOR NEW GAME PLUS")) / 2), 224 - 32, 1);
+        if (pressed(" ") || pressed("E")) {
+            newGamePlus++;
+            level = 0;
+            reset();
+        }
+        return;
+    }
+    
     if (victory && !edit) {
         blit({x: 528, y: 224, w: 160, h: 224}, 0, 0);
         blit({x: 528, y: 224, w: 160, h: 224}, 160, 0, 0, true);
@@ -200,8 +240,10 @@ function tick(ms) {
         drawText(levels[level].victoryText, Math.floor((320 - textWidth(levels[level].victoryText)) / 2), 16, 2);
         drawText("E OR SPACE TO CONTINUE", Math.floor((320 - textWidth("E OR SPACE TO CONTINUE")) / 2), 224 - 32, 1);
         if (pressed(" ") || pressed("E")) {
-            //level++;
-            reset();
+            level++;
+            if (level < 3) {
+                reset();
+            }
         }
         return;
     }
@@ -292,8 +334,7 @@ function tick(ms) {
         }
         if (e.hp <= 0) {
             anim = e.type.deathAnim;
-        }
-        if (e.attacking) {
+        } else if (e.attacking) {
             anim = e.type.attackAnim;
         }
         blit(anim, Math.floor(e.x - scrollX), Math.floor(e.y), e.animTime, e.flip);
@@ -330,6 +371,7 @@ function tick(ms) {
         player.blocking = false;
         if (down("ArrowDown") || down("S")) {
             player.blocking = true;
+            player.attacking = false;
         } else {
             if (canJump && (down("ArrowUp") || down("W"))) {
                 player.dy = -0.12;
@@ -389,9 +431,11 @@ function tick(ms) {
             if (candidates.length != 0) {
                 var e = candidates[0];
                 e.hp--;
-                e.stun = e.type.hitStun;
-                e.animTime = 0;
-                e.attacking = false;
+                e.stun = Math.floor(e.type.hitStun / (1 + newGamePlus));
+                if (e.stun || e.hp <= 0) {
+                    e.animTime = 0;
+                    e.attacking = false;
+                }
             }
         }
         player.animTime += ms;
@@ -452,22 +496,23 @@ function tick(ms) {
                 if (!player.blocking && player.x + 16 >= hurtBoxX && player.x <= hurtBoxX + hurtBoxW && player.y + 16 >= hurtBoxY && player.y <= hurtBoxY + hurtBoxH) {
                     player.animTime = 0;
                     player.attacking = false;
-                    player.stun = e.type.hurtStun;
-                    player.hp -= e.type.attackDamage;
+                    player.stun = e.type.hurtStun * (1 + newGamePlus);
+                    player.hp -= e.type.attackDamage + newGamePlus;
                 }
             }
             return;
         }
         e.cooldown -= ms;
-        if (Math.abs(e.x - player.x) <= 12 && player.y >= levels[level].groundLevel - 15 && e.cooldown <= 0) {
+        if (Math.abs(e.x - player.x) <= 12 && Math.abs(player.y - e.y) < 16 && e.cooldown <= 0) {
             e.flip = e.x > player.x;
             e.animTime = 0;
             e.attacking = true;
-            e.cooldown = e.type.attackInterval;
+            e.cooldown = e.type.attackInterval * 4 / (4 + newGamePlus);
             return;
         }
+        var eOnFloor = e.y >= levels[level].groundLevel || (e.x > player.x ? isFloor(Math.floor(e.x / 16 - ms * e.type.speed * 2), e.y / 16 + 1) : isFloor(Math.floor(e.x / 16 + ms * e.type.speed * 2) + 1, e.y / 16 + 1));
         var seen = enemies.some(e2 => Math.abs(e2.x - player.x < 120) && Math.abs(e.x - e2.x) <= e.type.coordinateRange);
-        if (player.y == levels[level].groundLevel && seen && Math.abs(e.x - player.x) > 10) {
+        if (eOnFloor && Math.abs(player.y - e.y) < 16 && seen && Math.abs(e.x - player.x) > 10) {
             e.flip = e.x > player.x;
             e.x += (e.flip ? -1 : 1) * ms * e.type.speed;
             e.animTime += ms;
