@@ -8,7 +8,7 @@ var t = 0;
 var tiles = [];
 var selection = {x: 80, y: 144};
 var scale = 1;
-var edit = true;
+var edit = false;
 var paletteScrollX = 0;
 const hurtTime = 120 * 3 + 20;
 const maxHP = 12;
@@ -59,7 +59,8 @@ var enemyType = {
         hurtStun: 400,
         attackInterval: 1000,
         hp: 2,
-        attackDamage: 3
+        attackDamage: 3,
+        coordinateRange: 0
     },
     taxCollector: {
         walkAnim: {x:256, y:16, frames: 8, period: 80},
@@ -71,7 +72,8 @@ var enemyType = {
         hurtStun: 800,
         attackInterval: 800,
         hp: 2,
-        attackDamage: 3
+        attackDamage: 3,
+        coordinateRange: 40
     }
 };
 
@@ -513,6 +515,7 @@ function img(img, x, y) {
 }
 
 function blit(img, x, y, time, flipped) {
+    if (x > 320 || x + (img.w || 16) < 0 || y > 224 || y + (img.h || 16) < 0) { return; }
     c.translate(x, y);
     if (flipped) {
         c.translate(img.w || 16, 0);
