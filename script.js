@@ -1,5 +1,5 @@
 function hwl(name, volume) {
-    return new Howl({src: ["sounds/" + name + ".ogg", "sounds/" + name + ".mp3", "sounds/" + name + ".wav"], volume: volume || 1});
+    return new Howl({src: ["sounds/" + name + ".wav"], volume: volume || 1});
 }
 
 var palette = false;
@@ -13,6 +13,7 @@ var paletteScrollX = 0;
 const hurtTime = 120 * 3 + 20;
 const maxHP = 12;
 var level = 0;
+var clickToStart = true;
 var intro = true;
 var victory = false;
 var newGamePlus = 0;
@@ -74,20 +75,20 @@ var enemyType = {
         stunFrame: {x:448, y:16},
         hitStun: 400,
         hurtStun: 800,
-        attackInterval: 800,
+        attackInterval: 1000,
         hp: 2,
         attackDamage: 3,
         coordinateRange: 40
     },
     butcher: {
         walkAnim: {x:256, y:48, frames: 8, period: 80},
-        speed: 0.045,
+        speed: 0.055,
         attackAnim: {x:384, y:48, frames: 4, period: 300},
         deathAnim: {x:448, y:48, frames: 4, period: 200},
         stunFrame: {x:448, y:48},
         hitStun: 0,
         hurtStun: 800,
-        attackInterval: 1000,
+        attackInterval: 1200,
         hp: 3,
         attackDamage: 4,
         coordinateRange: 40
@@ -202,6 +203,31 @@ function genTiles(w, h) {
     return ts;
 }
 
+var sBlock = null;
+var sChoir = null;
+var sDeath = null;
+var sJump = null;
+var sLand = null;
+var sMiss = null;
+var sPunch = null;
+
+function start() {
+    clickToStart = false;
+    sBlock = hwl("block");
+    sChoir = hwl("choir");
+    sDeath = hwl("death");
+    sJump = hwl("jump");
+    sLand = hwl("land");
+    sMiss = hwl("miss");
+    sPunch = hwl("punch");
+    enemyType.pimp.attackSound = hwl("knock");
+    enemyType.taxCollector.attackSound = hwl("coins");
+    enemyType.butcher.attackSound = hwl("cleaver");
+    pickupType.wine.sound = hwl("drink");
+    pickupType.bread.sound = hwl("eat");
+    pickupType.church.sound = hwl("church");
+}
+
 function tick(ms) {
     t += ms;
     scale = 1;
@@ -214,6 +240,19 @@ function tick(ms) {
         c.fillStyle = "#00021c";
         c.fillRect(0, 0, 320, 224);
     }
+    
+    /*if (clickToStart && !edit) {
+        c.fillStyle = "#a3ccd9";
+        c.fillRect(0, 0, 320, 224);
+        c.fillStyle = "#7497a6";
+        c.fillRect(2, 2, 320 - 4, 224 - 4);
+        drawText("THE MIRACLES OF ST NICHOLAS", 16, 16, 2);
+        drawText("CLICK TO START", 16, 224 - 32, 1);
+        if (click) {
+            start();
+        }
+        return
+    }*/
     
     //level = 3;
     
@@ -257,6 +296,9 @@ function tick(ms) {
         drawText(levels[level].intro, 16, 32, 0);
         drawText("E OR SPACE TO START", 16, 224 - 32, 1);
         if (pressed(" ") || pressed("E")) {
+            if (clickToStart) {
+                start();
+            }
             intro = false;
         }
         return;
@@ -351,6 +393,7 @@ function tick(ms) {
         player.y = levels[level].groundLevel;
         if (!prevOnGround) {
             player.landTime = 200;
+            sLand.play();
         }
     } else if (footTileY > prevFootTileY && (isFloor(Math.floor(player.x / 16 + 0.25), footTileY) || isFloor(Math.floor(player.x / 16 + 0.75), footTileY))) {
         player.dy = 0;
@@ -368,13 +411,18 @@ function tick(ms) {
             player.attackTime = 0;
             player.animTime = 0;
         }
+        var prevBlocking = player.blocking;
         player.blocking = false;
         if (down("ArrowDown") || down("S")) {
             player.blocking = true;
             player.attacking = false;
+            if (!prevBlocking) {
+                sBlock.play();
+            }
         } else {
             if (canJump && (down("ArrowUp") || down("W"))) {
                 player.dy = -0.12;
+                sJump.play();
             }
             if (down("ArrowLeft") || down("A")) {
                 player.flip = true;
@@ -394,8 +442,12 @@ function tick(ms) {
         player.landTime -= ms;
     }
     
+    var prevVictory = victory;
     if (player.x >= tiles[0].length * 16 - 6 * 16) {
         victory = true;
+        if (!prevVictory) {
+            sChoir.play();
+        }
     }
     
     player.x = Math.max(0, Math.min(tiles[0].length * 16 - 16, player.x));
@@ -406,6 +458,7 @@ function tick(ms) {
         var p = pickups[i];
         if (player.hp < maxHP && p.x + 4 <= player.x + 12 && p.x + 12 >= player.x + 4 && p.y <= player.y + 16 && p.y + 16 >= player.y) {
             player.hp = Math.min(maxHP, player.hp + p.type.hp);
+            p.type.sound.play();
             pickups.splice(i, 1);
             i--;
         }
@@ -430,12 +483,18 @@ function tick(ms) {
             }
             if (candidates.length != 0) {
                 var e = candidates[0];
+                sPunch.play();
                 e.hp--;
                 e.stun = Math.floor(e.type.hitStun / (1 + newGamePlus));
                 if (e.stun || e.hp <= 0) {
                     e.animTime = 0;
                     e.attacking = false;
+                    if (e.hp <= 0) {
+                        sDeath.play();
+                    }
                 }
+            } else {
+                sMiss.play();
             }
         }
         player.animTime += ms;
@@ -498,6 +557,7 @@ function tick(ms) {
                     player.attacking = false;
                     player.stun = e.type.hurtStun * (1 + newGamePlus);
                     player.hp -= e.type.attackDamage + newGamePlus;
+                    e.type.attackSound.play();
                 }
             }
             return;
