@@ -466,7 +466,8 @@ function tick(ms) {
             e.cooldown = e.type.attackInterval;
             return;
         }
-        if (player.y == levels[level].groundLevel && Math.abs(e.x - player.x) < 120 && Math.abs(e.x - player.x) > 10) {
+        var seen = enemies.some(e2 => Math.abs(e2.x - player.x < 120) && Math.abs(e.x - e2.x) <= e.type.coordinateRange);
+        if (player.y == levels[level].groundLevel && seen && Math.abs(e.x - player.x) > 10) {
             e.flip = e.x > player.x;
             e.x += (e.flip ? -1 : 1) * ms * e.type.speed;
             e.animTime += ms;
