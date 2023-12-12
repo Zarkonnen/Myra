@@ -210,6 +210,7 @@ var sJump = null;
 var sLand = null;
 var sMiss = null;
 var sPunch = null;
+var music = null;
 
 function start() {
     clickToStart = false;
@@ -226,6 +227,9 @@ function start() {
     pickupType.wine.sound = hwl("drink");
     pickupType.bread.sound = hwl("eat");
     pickupType.church.sound = hwl("church");
+    music = hwl("carol", 0.3);
+    music.loop(true);
+    music.play();
 }
 
 function tick(ms) {
@@ -558,6 +562,8 @@ function tick(ms) {
                     player.stun = e.type.hurtStun * (1 + newGamePlus);
                     player.hp -= e.type.attackDamage + newGamePlus;
                     e.type.attackSound.play();
+                } else {
+                    sMiss.play();
                 }
             }
             return;
